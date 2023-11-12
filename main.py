@@ -28,10 +28,14 @@ def extract_suits_by_owner(path):
 
 
 def find_file_path(root_dir, file_name):
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        if file_name in filenames:
-            return os.path.join(dirpath, file_name)
-    return None
+    return next(
+        (
+            os.path.join(dirpath, file_name)
+            for dirpath, dirnames, filenames in os.walk(root_dir)
+            if file_name in filenames
+        ),
+        None,
+    )
 
 
 def get_test_names(root_dir, suite_list):
