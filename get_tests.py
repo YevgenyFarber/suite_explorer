@@ -1,11 +1,14 @@
+import contextlib
 import os
 import json
 from pathlib import Path
 import argparse
-
-
 from typing import List, Tuple, Dict, Optional, Any
 from contextlib import suppress
+
+from confluence_connector import confluence_connection
+from page_actions import update_page
+from page_creator import Page
 
 PATH: str = f'{str(Path.home())}/work/qa/'
 OWNERS_LIST = None
@@ -34,8 +37,8 @@ def save_json_file(full_path: str, data: json) -> Optional[Any]:
     return None
 
 
-def filter_suites_by_owner(path: str) -> Tuple[List[str], List[str]]:
-    suites_list: List[str] = []
+def filter_suites_by_owner(path: str) -> Tuple[Dict[str, str | list], List[str]]:
+    suites_list: Dict[str, str | list] = {}
     invalid_files_list: List[str] = []
     for dir_path, _, file_names in os.walk(path):
         for file_name in file_names:
@@ -46,56 +49,48 @@ def filter_suites_by_owner(path: str) -> Tuple[List[str], List[str]]:
                     print(f"Invalid JSON format in file: {full_path}")
                     invalid_files_list.append(file_name)
                 elif 'owners' in data and any(owner['name'] in OWNERS_LIST for owner in data['owners']):
-                    suites_list.append(file_name)
+                    with contextlib.suppress(KeyError):
+                        suites_list[file_name] = [OWNERS_IDS[i['name']] for i in data['owners']]
     return suites_list, invalid_files_list
 
 
-def get_all_owners_and_suites(path: str) -> Tuple[Dict[str, str], List[str]]:
-    suites_list: Dict[str, str] = {}
-    invalid_files_list: List[str] = []
-    for dir_path, _, file_names in os.walk(path):
-        for file_name in file_names:
-            if is_json_file(file_name):
-                full_path = os.path.join(dir_path, file_name)
-                data = load_json_file(full_path)
-                if data is None:
-                    print(f"Invalid JSON format in file: {full_path}")
-                    invalid_files_list.append(file_name)
-                else:
-                    suites_list[file_name] = ', '.join([f"{i['name']} - {i['email']}" for i in data['owners']])
-    return suites_list, invalid_files_list
+def collect_test_names_from_suites(suites_list: Dict[str, str | list]) -> Dict[str, Dict[str, Any]]:
+    suites_dict = {}
 
-
-def collect_test_names_from_suites(suites_list: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
-    suites_dict: Dict[str, Dict[str, Any]] = {}
-    test_name_missing = []
     for suite_file, owners in suites_list.items():
-        if full_path := find_file_path(PATH, suite_file):
-            data = load_json_file(full_path)
-            save_json_file(full_path, data)
-            if data and 'trafficTestGroups' in data:
-                try:
-                    suites_dict[suite_file] = {
-                        'test_name': [i['name'] for i in data['trafficTestGroups']],
-                        'path': full_path.replace(
-                            f'{PATH}tests/', '').replace(
-                            f'/suites/{suite_file}', ''),
-                        'owners': owners
-                    }
-                except KeyError:
-                    test_name_missing.append(suite_file)
+        full_paths = find_file_path(PATH, suite_file)
+
+        for path in full_paths:
+            data = load_json_file(path)
+            if not data or 'trafficTestGroups' not in data or not data.get('group_name'):
+                continue
+
+            group_name = data['group_name']
+            feature_name = data.get('feature_name', '')
+            suites_dict.setdefault(group_name, {}).setdefault(feature_name, {})
+            suite_entry = suites_dict[group_name][feature_name].setdefault(suite_file, {
+                'test_name': [],
+                'path': '',
+                'owners': owners
+            })
+
+            suite_entry['test_name'].extend(i['name'] for i in data['trafficTestGroups'])
+
+            new_path = path.replace(f'{PATH}tests/', '').replace(f'/suites/{suite_file}', '')
+            if suite_entry['path']:
+                suite_entry['path'] += f"<br />{new_path}"
+            else:
+                suite_entry['path'] = new_path
+
     return suites_dict
 
 
-def find_file_path(root_dir: str, file_name: str) -> Optional[str]:
-    return next(
-        (
-            os.path.join(dir_path, file_name)
-            for dir_path, _, filenames in os.walk(root_dir)
-            if file_name in filenames
-        ),
-        None,
-    )
+def find_file_path(root_dir: str, file_name: str) -> list:
+    path_list = []
+    for dir_path, _, filenames in os.walk(root_dir):
+        if file_name in filenames:
+            path_list.append(os.path.join(dir_path, file_name))
+    return path_list
 
 
 def find_suites_without_tests(suites_with_tests: Dict[str, Any], all_suite_list: Dict[str, str]) -> List[str]:
@@ -120,19 +115,33 @@ if __name__ == '__main__':
         print(f"Check your Json, the format should be as below\n {json.loads(json_format_example)}")
         raise SystemExit(1)
     OWNERS_LIST = owners_list['owners']
-    suite_list, invalid_files = get_all_owners_and_suites(os.path.join(PATH, 'qa_resources', 'suite_owner'))
-    # suite_list, invalid_files = filter_suites_by_owner(os.path.join(PATH, 'qa_resources', 'suite_owner'))
+    OWNERS_IDS = owners_list
+    suite_list, invalid_files = filter_suites_by_owner(os.path.join(PATH, 'qa_resources', 'suite_owner'))
     suites = collect_test_names_from_suites(suite_list)
-    suites_without_tests = find_suites_without_tests(suites, suite_list)
+    page = ''
     count = 0
-    with open("myfile.txt", "a") as f:
-        for suite, tests in suites.items():
-            f.write('\n')
-            f.write(f'{suite} - {tests["path"]} - {tests["owners"]}\n')
-            for test_name in tests['test_name']:
-                f.write(f'\t{test_name}\n')
-            count += len(tests['test_name'])
-        f.write('\n')
-        f.write(f'Total suites count: {len(suites)}\n')
-        f.write(f'Total tests count: {count}')
+    with open("result_object.json", 'w', encoding='UTF-8') as fp:
+        json.dump(suites, fp, indent=4, ensure_ascii=False)
+    for suite_name, suite_data in suites.items():
+        page_creator = Page(suite_name, suite_data)
+        page += page_creator.create_page()
+
+    final_html_content = f"""
+     <p>The purpose of this document is to give an overview of all the tests reviewed by security-inline team.</p>
+     <p><ac:structured-macro ac:name=\"toc\"/></p>
+     <p>{page}</p>
+     """
+
+    client = confluence_connection('yevgeny.farber@catonetworks.com', 'ATATT3xFfGF0VLt_CaxpIUEk2GmbWbAdOY650omxMFAicxRJ6KokUUQ-lwY4P5u3M7MGwLexB7wRQzi4ntgIgJwPX-tPMtLrVk88bVDqbLdP8oMQWb8rgut23E1WEEIXGqpay80L9iN33Q1tBeHFCKIQWT-etTMKqBFCDQ0FLPdSVCbXm0mVt0A=1009B3C6')
+    update_page(client, '2780823557', 'YevgenyTesting', final_html_content)
     print()
+    # with open("myfile.txt", "a") as f:
+    #     for suite, tests in suites.items():
+    #         f.write('\n')
+    #         f.write(f'{suite} - {tests["path"]} - {tests["owners"]}\n')
+    #         for test_name in tests['test_name']:
+    #             f.write(f'\t{test_name}\n')
+    #         count += len(tests['test_name'])
+    #     f.write('\n')
+    #     f.write(f'Total suites count: {len(suites)}\n')
+    #     f.write(f'Total tests count: {count}')
