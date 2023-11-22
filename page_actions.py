@@ -13,5 +13,3 @@ def get_page_actions(client):
 def update_page(client, page_id, title, body):
     client.update_or_create(
         page_id, title, body, representation='storage', editor='v2')
-
-
