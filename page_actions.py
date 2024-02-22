@@ -1,4 +1,7 @@
-def get_page_actions(client):
+from atlassian import Confluence
+
+
+def get_page_actions(client: Confluence) -> None:
     # page = self.clients.confluence.get_page_id('AT1', 'Test NET60 IP Pool')
     # page = self.clients.confluence.get_page_properties('72220910')
     page = client.get_page_by_title('RnD', 'YevgenyTesting', expand='body.storage')
@@ -10,6 +13,6 @@ def get_page_actions(client):
     print()
 
 
-def update_page(client, page_id, title, body):
+def update_page(client: Confluence, page_id: str, title: str, body: str) -> None:
     client.update_or_create(
         page_id, title, body, representation='storage', editor='v2')

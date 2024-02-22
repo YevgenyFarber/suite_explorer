@@ -1,12 +1,14 @@
 import contextlib
 import os
 import json
+from collections import defaultdict
 from pathlib import Path
 import argparse
 from typing import List, Tuple, Dict, Optional, Any
 from contextlib import suppress
 
 from confluence_connector import confluence_connection
+from owners_table import OwnersTable
 from page_actions import update_page
 from page_creator import Page
 
@@ -50,7 +52,21 @@ def filter_suites_by_owner(path: str, owners_object: dict, owners_ids) -> Tuple[
                 elif 'owners' in data and any(owner['name'] in owners_object['owners'] for owner in data['owners']):
                     with contextlib.suppress(KeyError):
                         suites_list[file_name] = [owners_ids[i['email']] for i in data['owners']]
+
     return suites_list, invalid_files_list
+
+
+def collect_suites_without_group_name(suites_list, skip_folders) -> List[str]:
+    suites: List[str] = []
+    for suite_file, owners in suites_list.items():
+        full_paths = find_file_path(PATH, suite_file, skip_folders)
+
+        for path in full_paths:
+            data = load_json_file(path)
+            if data and not data.get('group_name'):
+                suites.append(suite_file)
+
+    return suites
 
 
 def collect_test_names_from_suites(suites_list: Dict[str, str | list], skip_folders: list) -> Dict[str, Dict[str, Any]]:
@@ -74,6 +90,7 @@ def collect_test_names_from_suites(suites_list: Dict[str, str | list], skip_fold
             })
 
             suite_entry['test_name'].extend(i['name'] for i in data['trafficTestGroups'])
+            suite_entry['test_name'] = list(set(suite_entry['test_name']))
 
             new_path = path.replace(f'{PATH}tests/', '').replace(f'/suites/{suite_file}', '')
             if suite_entry['path']:
@@ -132,15 +149,23 @@ def get_owner_object(args):
     return owners_list
 
 
-def prepare_page(suites, test_count, suite_count):
+def prepare_page(suites, test_count, suite_count, suites_per_owner_count):
     page = ''
     for suite_name, suite_data in suites.items():
         page_creator = Page(suite_name, suite_data)
         page += page_creator.create_page()
 
+    table_header = OwnersTable().static_table()
+    end_of_table = OwnersTable().end_of_table()
+    table = ''
+    for owner, count in suites_per_owner_count.items():
+        table += OwnersTable().row_creator(owner, count)
+
     return f"""
      <p>The purpose of this document is to give an overview of all the tests reviewed by security-inline team.</p>
      <p>There are total of {test_count} test in {suite_count} suites</p>
+     <p>Suites per owner:</p>
+     <p>{table_header + table + end_of_table}</p>
      <p><ac:structured-macro ac:name=\"toc\"/></p>
      <p>{page}</p>
      """
@@ -151,14 +176,33 @@ def send_to_confluence(owners_list, final_html_content):
     update_page(client, owners_list['parent_id'], owners_list['page_title'], final_html_content)
 
 
-def main(args):
+def count_owners(data):
+    owner_count = defaultdict(int)
+
+    def extract_owners(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k == 'owners' and isinstance(v, list) and v:
+                    owner_count[v[0]] += 1  # Take only the first owner from the list
+                else:
+                    extract_owners(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                extract_owners(item)
+
+    extract_owners(data)
+    return dict(owner_count)
+
+
+def main(args) -> None:
     owners_list = get_owner_object(args)
     owners_ids = load_json_file(os.path.join(PATH, 'qa_resources/infra/reporting', 'email_to_jira_account.json'))
     suite_list, invalid_files = filter_suites_by_owner(
         os.path.join(PATH, 'qa_resources', 'suite_owner'), owners_list, owners_ids)
+    # no_groups = collect_suites_without_group_name(suite_list, owners_list['exclude_cycles'])
     suites = collect_test_names_from_suites(suite_list, owners_list['exclude_cycles'])
     test_count, suite_count = count_test_and_suites(suites)
-    final_html_content = prepare_page(suites, test_count, suite_count)
+    final_html_content = prepare_page(suites, test_count, suite_count, count_owners(suites))
     send_to_confluence(owners_list, final_html_content.replace('\n', ''))
 
 

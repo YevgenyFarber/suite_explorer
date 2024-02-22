@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Python Script Web Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            text-align: center;
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            overflow: hidden;
+        }
+        header {
+            background: #50b3a2;
+            color: white;
+            padding-top: 30px;
+            min-height: 70px;
+            border-bottom: #e8491d 3px solid;
+        }
+        .button {
+            height: 50px;
+            background: #e8491d;
+            border: 0;
+            padding-left: 20px;
+            padding-right: 20px;
+            color: #ffffff;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .button:hover {
+            background: #434343;
+        }
+        input[type="text"] {
+            height: 30px;
+            width: calc(100% - 20px);
+            margin-top: 10px;
+            padding: 5px;
+        }
+        form {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px #a1a1a1;
+        }
+        #progressBar {
+            width: 0%;
+            height: 20px;
+            background-color: blue;
+            margin-top: 10px;
+            color: white;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div id="branding">
+                <h1>Python Web Interface</h1>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <form id="dataForm">
+            <h1>Enter Script Inputs</h1>
+            <input type="text" name="json_path" placeholder="Enter JSON file path"><br>
+            <button type="submit" class="button">Start Task</button>
+        </form>
+        <div id="progressBar">0%</div>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        document.getElementById('dataForm').onsubmit = function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+
+            fetch('/start-task', {
+                method: 'POST',
+                body: formData
+            })
+            .then(() => {
+                updateProgress();  // Start updating progress
+            });
+
+            function updateProgress() {
+                fetch('/progress')
+                    .then(response => response.json())
+                    .then(data => {
+                        var progressBar = document.getElementById('progressBar');
+                        progressBar.style.width = data.progress + '%';
+                        progressBar.innerText = data.progress + '%';
+                        if (data.progress < 100) {
+                            setTimeout(updateProgress, 1000);
+                        } else {
+                            document.getElementById('output').innerText = 'Task Completed';
+                        }
+                    });
+            }
+        };
+    </script>
+</body>
+</html>

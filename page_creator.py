@@ -2,11 +2,11 @@ from xhtml_cleaner import saved_char_replacement
 
 
 class Page:
-    def __init__(self, suite_name, suite_data):
+    def __init__(self, suite_name: str, suite_data: dict) -> None:
         self.suite_name = suite_name
         self.suite_data = suite_data
 
-    def create_page(self):
+    def create_page(self) -> str:
         sections_html = f'<h2>{self.suite_name}</h2>'
         for feature_name, suite_data in self.suite_data.items():
             sections_html += f'<h3>{feature_name}</h3>'

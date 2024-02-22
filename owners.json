@@ -1,11 +1,19 @@
 {
-  "owners": [
-    "Eden Ben Ezri", "Tomer Girhish", "Alon Ben Avraham", "Samah Jumah", "Yevgeny Farber"
+  "owners" :
+    [
+    "Eden Ben Ezri",
+    "Tomer Girhish",
+    "Alon Ben Avraham",
+    "Samah Jumah",
+    "Zafrir Yakir",
+    "Yevgeny Farber"
   ],
-  "Eden Ben Ezri": "605ae4eb0a9b690071a1213d",
-  "Tomer Girhish": "557058:679979a3-1c50-491a-bc69-32e450330dac",
-  "Yevgeny Farber": "712020:efcad1a5-7b56-4942-ad06-d2c2aeb07cdc",
-  "Alon Ben Avraham": "63ad6ef17cde7bff9d78df2d",
-  "Samah Jumah": "63ad6ef17cde7bff9d78df2d",
-  "Zafrir Yakir": "627cba2af29dcb0068f956e5"
+  "exclude_cycles": [
+    "conf_ci",
+    "conf_doron"
+  ],
+  "page_title": "Security inline tests",
+  "parent_id": "2780823557",
+  "user": "yevgeny.farber@catonetworks.com",
+  "token": "ATATT3xFfGF0RUsU4243NwafMTSRlgMe4ensWZajerl4iOVvKi730PA4cdIDVucMW_AqNx7ozkx8KpCzfHlYWMIqLg2M0b8q127rejryuaFmttx5eUXOsIiKRFF3WGJS_830WCzfzS96WcyQ8Q5Om-gURwJqGhOekjCPClvWvTNLap2lG6_FkNs=9533A584"
 }

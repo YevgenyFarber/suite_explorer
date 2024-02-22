@@ -1,7 +1,7 @@
 from atlassian import Confluence
 
 
-def confluence_connection(user_name, password):
+def confluence_connection(user_name: str, password: str) -> Confluence:
 
     return Confluence(
         url='https://catonetworks.atlassian.net/',
